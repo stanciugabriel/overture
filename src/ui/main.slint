@@ -1,0 +1,891 @@
+// Syringe Pump — Portrait 170 x 320
+// States: 0=RUNNING  1=PAUSED  2=ALARM  3=RATE_ADJUST  4=BOLUS
+
+export struct PumpData {
+    state:          int,
+    // drug
+    drug_name:      string,
+    concentration:  string,   // e.g. "10 mg/mL"
+    syringe_size:   string,   // e.g. "20 mL · BD Plastipak"
+    // infusion
+    rate:           int,      // integer part  e.g. 5
+    rate_dec:       int,      // decimal part  e.g. 0  → "5.0 mL/hr"
+    vol_del_int:    int,
+    vol_del_dec:    int,      // volume delivered e.g. 12.3 mL
+    time_rem_h:     int,
+    time_rem_m:     int,
+    syringe_pct:    int,      // 0–100 remaining
+    nfc_ok:         bool,
+    battery_pct:    int,
+    // rate adjust
+    new_rate:       int,
+    new_rate_dec:   int,
+    old_rate:       int,
+    old_rate_dec:   int,
+    // bolus
+    bolus_vol_int:  int,
+    bolus_vol_dec:  int,
+    bolus_progress: int,      // 0–100
+    bolus_active:   bool,
+    // alarm
+    alarm_title:    string,
+    alarm_body:     string,
+    alarm_time:     string,
+    // blink for alarm
+    blink:          bool,
+    // setup list picker (state 5)
+    sel_title:      string,
+    sel_0:          string,
+    sel_1:          string,
+    sel_2:          string,
+    sel_3:          string,
+    sel_4:          string,
+    sel_cursor:     int,      // 0–4, which row is highlighted
+    // setup confirm (state 6)
+    confirm_drug:   string,
+    confirm_syringe: string,
+    confirm_rate:   int,
+    confirm_rate_dec: int,
+    // motor test (state 7)
+    motor_steps:    int,
+}
+
+export component SyringePump inherits Window {
+    in property <PumpData> data: {
+        state: 0,
+        drug_name: "Morphine",
+        concentration: "10 mg/mL",
+        syringe_size: "20 mL · BD Plastipak",
+        rate: 5,
+        rate_dec: 0,
+        vol_del_int: 12,
+        vol_del_dec: 3,
+        time_rem_h: 1,
+        time_rem_m: 42,
+        syringe_pct: 62,
+        nfc_ok: true,
+        battery_pct: 84,
+        new_rate: 8,
+        new_rate_dec: 0,
+        old_rate: 5,
+        old_rate_dec: 0,
+        bolus_vol_int: 0,
+        bolus_vol_dec: 5,
+        bolus_progress: 0,
+        bolus_active: false,
+        alarm_title: "OCCLUSION",
+        alarm_body: "Line blocked or kinked.\nMotor stopped safely.",
+        alarm_time: "14:32:07",
+        blink: true,
+        motor_steps: 0,
+    };
+
+    width: 170px;
+    height: 320px;
+    background: #000000;
+
+    // ═══════════════════════════════════════
+    // RUNNING / PAUSED  (state 0 or 1)
+    // ═══════════════════════════════════════
+    if data.state == 0 || data.state == 1: Rectangle {
+        x: 0;
+        y: 0;
+        width: 170px;
+        height: 320px;
+        background: #000000;
+
+        // ── top status bar ────────────────────────────────────
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: 170px;
+            height: 28px;
+            background: #111111;
+
+            // NFC tick
+            Text {
+                x: 10px;
+                y: 7px;
+                text: data.nfc_ok ? "✓" : "!";
+                color: data.nfc_ok ? #30d158 : #ff9f0a;
+                font-size: 11px;
+                font-weight: 700;
+            }
+
+            Text {
+                x: 24px;
+                y: 7px;
+                text: data.drug_name + "  " + data.concentration;
+                color: #8e8e93;
+                font-size: 10px;
+            }
+            // battery
+            Text {
+                x: 130px;
+                y: 7px;
+                width: 32px;
+                text: data.battery_pct + "%";
+                color: data.battery_pct < 20 ? #ff453a : #8e8e93;
+                font-size: 10px;
+                horizontal-alignment: right;
+            }
+        }
+
+        // ── state pill ────────────────────────────────────────
+        Rectangle {
+            x: 55px;
+            y: 36px;
+            width: 60px;
+            height: 20px;
+            border-radius: 10px;
+            background: data.state == 0 ? #0a2e14 : #2a2a2c;
+            Text {
+                x: 0;
+                y: 3px;
+                width: 60px;
+                text: data.state == 0 ? "▶  RUNNING" : "⏸  PAUSED";
+                color: data.state == 0 ? #30d158 : #636366;
+                font-size: 9px;
+                font-weight: 700;
+                horizontal-alignment: center;
+            }
+        }
+
+        // ── rate — dominant element ───────────────────────────
+        Text {
+            x: 0;
+            y: 64px;
+            width: 170px;
+            text: data.rate + "." + data.rate_dec;
+            color: data.state == 0 ? #ffffff : #48484a;
+            font-size: 78px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            x: 0;
+            y: 148px;
+            width: 170px;
+            text: "mL / hr";
+            color: #636366;
+            font-size: 13px;
+            horizontal-alignment: center;
+        }
+
+        // ── divider ───────────────────────────────────────────
+        Rectangle {
+            x: 16px;
+            y: 170px;
+            width: 138px;
+            height: 1px;
+            background: #1c1c1e;
+        }
+
+        // ── vol delivered + time remaining ────────────────────
+        Text {
+            x: 16px;
+            y: 180px;
+            text: "DELIVERED";
+            color: #3a3a3c;
+            font-size: 9px;
+            font-weight: 600;
+        }
+
+        Text {
+            x: 100px;
+            y: 180px;
+            text: "REMAINING";
+            color: #3a3a3c;
+            font-size: 9px;
+            font-weight: 600;
+        }
+
+        Text {
+            x: 16px;
+            y: 194px;
+            text: data.vol_del_int + "." + data.vol_del_dec + " mL";
+            color: #ffffff;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        Text {
+            x: 100px;
+            y: 194px;
+            text: data.time_rem_h + "h " + data.time_rem_m + "m";
+            color: #ffffff;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        // ── syringe fill bar ──────────────────────────────────
+        Text {
+            x: 16px;
+            y: 230px;
+            text: data.syringe_size;
+            color: #3a3a3c;
+            font-size: 9px;
+        }
+        // track
+        Rectangle {
+            x: 16px;
+            y: 244px;
+            width: 138px;
+            height: 10px;
+            border-radius: 5px;
+            background: #1c1c1e;
+            // fill
+            Rectangle {
+                x: 0;
+                y: 0;
+                width: (data.syringe_pct * 138 / 100) * 1px;
+                height: 10px;
+                border-radius: 5px;
+                background: data.syringe_pct < 15 ? #ff453a : data.syringe_pct < 30 ? #ff9f0a : #0a84ff;
+            }
+        }
+
+        Text {
+            x: 16px;
+            y: 259px;
+            text: data.syringe_pct + "% remaining";
+            color: #3a3a3c;
+            font-size: 9px;
+        }
+
+        // ── bottom hint ───────────────────────────────────────
+        Rectangle {
+            x: 0;
+            y: 296px;
+            width: 170px;
+            height: 24px;
+            background: #0a0a0a;
+            Text {
+                x: 0;
+                y: 5px;
+                width: 170px;
+                text: data.state == 0 ? "UP/DOWN = rate   OK = pause" : "OK = resume   UP/DOWN = rate";
+                color: #48484a;
+                font-size: 9px;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════
+    // RATE ADJUST  (state 3)
+    // ═══════════════════════════════════════
+    if data.state == 3: Rectangle {
+        x: 0;
+        y: 0;
+        width: 170px;
+        height: 320px;
+        background: #000000;
+
+        Text {
+            x: 0;
+            y: 40px;
+            width: 170px;
+            text: "ADJUST RATE";
+            color: #636366;
+            font-size: 13px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        // old rate
+        Text {
+            x: 0;
+            y: 78px;
+            width: 170px;
+            text: "was  " + data.old_rate + "." + data.old_rate_dec + " mL/hr";
+            color: #3a3a3c;
+            font-size: 14px;
+            horizontal-alignment: center;
+        }
+
+        // button hints
+        Text {
+            x: 8px;
+            y: 126px;
+            text: "▼";
+            color: #2a2a2c;
+            font-size: 28px;
+        }
+
+        Text {
+            x: 138px;
+            y: 126px;
+            text: "▲";
+            color: #2a2a2c;
+            font-size: 28px;
+        }
+
+        // new rate — big
+        Text {
+            x: 0;
+            y: 108px;
+            width: 170px;
+            text: data.new_rate + "." + data.new_rate_dec;
+            color: #ff9f0a;
+            font-size: 72px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            x: 0;
+            y: 184px;
+            width: 170px;
+            text: "mL / hr";
+            color: #636366;
+            font-size: 13px;
+            horizontal-alignment: center;
+        }
+
+        // confirm pill
+        Rectangle {
+            x: 35px;
+            y: 230px;
+            width: 100px;
+            height: 34px;
+            border-radius: 17px;
+            background: #ff9f0a;
+            Text {
+                x: 0;
+                y: 9px;
+                width: 100px;
+                text: "SET RATE";
+                color: #000000;
+                font-size: 13px;
+                font-weight: 700;
+                horizontal-alignment: center;
+            }
+        }
+
+        Text {
+            x: 0;
+            y: 284px;
+            width: 170px;
+            text: "OK = confirm   BACK = cancel";
+            color: #3a3a3c;
+            font-size: 10px;
+            horizontal-alignment: center;
+        }
+    }
+
+    // ═══════════════════════════════════════
+    // BOLUS  (state 4)
+    // ═══════════════════════════════════════
+    if data.state == 4: Rectangle {
+        x: 0;
+        y: 0;
+        width: 170px;
+        height: 320px;
+        background: #000000;
+
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: 170px;
+            height: 36px;
+            background: #1a1000;
+            Text {
+                x: 0;
+                y: 10px;
+                width: 170px;
+                text: "⚡  BOLUS";
+                color: #ff9f0a;
+                font-size: 14px;
+                font-weight: 700;
+                horizontal-alignment: center;
+            }
+        }
+
+        // bolus volume — big
+        Text {
+            x: 0;
+            y: 58px;
+            width: 170px;
+            text: "Volume";
+            color: #636366;
+            font-size: 12px;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            x: 0;
+            y: 76px;
+            width: 170px;
+            text: data.bolus_vol_int + "." + data.bolus_vol_dec + " mL";
+            color: #ffffff;
+            font-size: 52px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        // divider
+        Rectangle {
+            x: 16px;
+            y: 140px;
+            width: 138px;
+            height: 1px;
+            background: #1c1c1e;
+        }
+
+        // rate info
+        Text {
+            x: 16px;
+            y: 152px;
+            text: "Rate";
+            color: #3a3a3c;
+            font-size: 11px;
+        }
+
+        Text {
+            x: 100px;
+            y: 152px;
+            text: "Duration";
+            color: #3a3a3c;
+            font-size: 11px;
+        }
+
+        Text {
+            x: 16px;
+            y: 168px;
+            text: "200 mL/hr";
+            color: #8e8e93;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        Text {
+            x: 100px;
+            y: 168px;
+            text: "~9 sec";
+            color: #8e8e93;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        // progress bar (shown during delivery)
+        Rectangle {
+            x: 16px;
+            y: 202px;
+            width: 138px;
+            height: 6px;
+            border-radius: 3px;
+            background: #1c1c1e;
+            Rectangle {
+                x: 0;
+                y: 0;
+                width: (data.bolus_progress * 138 / 100) * 1px;
+                height: 6px;
+                border-radius: 3px;
+                background: #ff9f0a;
+            }
+        }
+
+        Text {
+            x: 0;
+            y: 218px;
+            width: 170px;
+            text: data.bolus_active ? "Delivering..." : "Hold BOLUS to deliver";
+            color: data.bolus_active ? #ff9f0a : #48484a;
+            font-size: 11px;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            x: 0;
+            y: 238px;
+            width: 170px;
+            text: data.bolus_active ? "Release to cancel" : "";
+            color: #3a3a3c;
+            font-size: 10px;
+            horizontal-alignment: center;
+        }
+
+        // safety warning
+        Rectangle {
+            x: 16px;
+            y: 272px;
+            width: 138px;
+            height: 36px;
+            border-radius: 10px;
+            background: #1a1000;
+            Text {
+                x: 0;
+                y: 10px;
+                width: 138px;
+                text: "Hold button continuously";
+                color: #ff9f0a;
+                font-size: 10px;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════
+    // SETUP LIST PICKER  (state 5 — syringe or drug select)
+    // ═══════════════════════════════════════
+    if data.state == 5: Rectangle {
+        x: 0; y: 0; width: 170px; height: 320px;
+        background: #000000;
+
+        // title bar
+        Rectangle {
+            x: 0; y: 0; width: 170px; height: 36px;
+            background: #111111;
+            Text {
+                x: 0; y: 10px; width: 170px;
+                text: data.sel_title;
+                color: #8e8e93;
+                font-size: 11px; font-weight: 700;
+                horizontal-alignment: center;
+            }
+        }
+
+        // row helper — repeated 5× by offset
+        // row 0
+        Rectangle {
+            x: 0; y: 44px; width: 170px; height: 44px;
+            background: data.sel_cursor == 0 ? #1c3a5c : #000000;
+            Rectangle { x: 16px; y: 43px; width: 138px; height: 1px; background: #1c1c1e; }
+            Text {
+                x: 0; y: 12px; width: 170px;
+                text: data.sel_0;
+                color: data.sel_cursor == 0 ? #ffffff : #636366;
+                font-size: 12px; font-weight: data.sel_cursor == 0 ? 700 : 400;
+                horizontal-alignment: center;
+            }
+            Text {
+                x: 148px; y: 14px;
+                text: data.sel_cursor == 0 ? "›" : "";
+                color: #0a84ff; font-size: 14px;
+            }
+        }
+        // row 1
+        Rectangle {
+            x: 0; y: 88px; width: 170px; height: 44px;
+            background: data.sel_cursor == 1 ? #1c3a5c : #000000;
+            Rectangle { x: 16px; y: 43px; width: 138px; height: 1px; background: #1c1c1e; }
+            Text {
+                x: 0; y: 12px; width: 170px;
+                text: data.sel_1;
+                color: data.sel_cursor == 1 ? #ffffff : #636366;
+                font-size: 12px; font-weight: data.sel_cursor == 1 ? 700 : 400;
+                horizontal-alignment: center;
+            }
+            Text {
+                x: 148px; y: 14px;
+                text: data.sel_cursor == 1 ? "›" : "";
+                color: #0a84ff; font-size: 14px;
+            }
+        }
+        // row 2
+        Rectangle {
+            x: 0; y: 132px; width: 170px; height: 44px;
+            background: data.sel_cursor == 2 ? #1c3a5c : #000000;
+            Rectangle { x: 16px; y: 43px; width: 138px; height: 1px; background: #1c1c1e; }
+            Text {
+                x: 0; y: 12px; width: 170px;
+                text: data.sel_2;
+                color: data.sel_cursor == 2 ? #ffffff : #636366;
+                font-size: 12px; font-weight: data.sel_cursor == 2 ? 700 : 400;
+                horizontal-alignment: center;
+            }
+            Text {
+                x: 148px; y: 14px;
+                text: data.sel_cursor == 2 ? "›" : "";
+                color: #0a84ff; font-size: 14px;
+            }
+        }
+        // row 3
+        Rectangle {
+            x: 0; y: 176px; width: 170px; height: 44px;
+            background: data.sel_cursor == 3 ? #1c3a5c : #000000;
+            Rectangle { x: 16px; y: 43px; width: 138px; height: 1px; background: #1c1c1e; }
+            Text {
+                x: 0; y: 12px; width: 170px;
+                text: data.sel_3;
+                color: data.sel_cursor == 3 ? #ffffff : #636366;
+                font-size: 12px; font-weight: data.sel_cursor == 3 ? 700 : 400;
+                horizontal-alignment: center;
+            }
+            Text {
+                x: 148px; y: 14px;
+                text: data.sel_cursor == 3 ? "›" : "";
+                color: #0a84ff; font-size: 14px;
+            }
+        }
+        // row 4
+        Rectangle {
+            x: 0; y: 220px; width: 170px; height: 44px;
+            background: data.sel_cursor == 4 ? #1c3a5c : #000000;
+            Rectangle { x: 16px; y: 43px; width: 138px; height: 1px; background: #1c1c1e; }
+            Text {
+                x: 0; y: 12px; width: 170px;
+                text: data.sel_4;
+                color: data.sel_cursor == 4 ? #ffffff : #636366;
+                font-size: 12px; font-weight: data.sel_cursor == 4 ? 700 : 400;
+                horizontal-alignment: center;
+            }
+            Text {
+                x: 148px; y: 14px;
+                text: data.sel_cursor == 4 ? "›" : "";
+                color: #0a84ff; font-size: 14px;
+            }
+        }
+
+        // scroll hint
+        Text {
+            x: 0; y: 276px; width: 170px;
+            text: "▲ UP   ▼ DOWN   OK = select";
+            color: #3a3a3c; font-size: 9px;
+            horizontal-alignment: center;
+        }
+    }
+
+    // ═══════════════════════════════════════
+    // SETUP CONFIRM  (state 6)
+    // ═══════════════════════════════════════
+    if data.state == 6: Rectangle {
+        x: 0; y: 0; width: 170px; height: 320px;
+        background: #000000;
+
+        Text {
+            x: 0; y: 28px; width: 170px;
+            text: "CONFIRM SETUP";
+            color: #636366; font-size: 11px; font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        // divider
+        Rectangle { x: 16px; y: 50px; width: 138px; height: 1px; background: #1c1c1e; }
+
+        Text { x: 16px; y: 60px; text: "DRUG";    color: #3a3a3c; font-size: 9px; font-weight: 600; }
+        Text { x: 16px; y: 74px; text: data.confirm_drug; color: #ffffff; font-size: 16px; font-weight: 600; }
+
+        Text { x: 16px; y: 100px; text: "SYRINGE"; color: #3a3a3c; font-size: 9px; font-weight: 600; }
+        Text { x: 16px; y: 114px; text: data.confirm_syringe; color: #ffffff; font-size: 13px; }
+
+        Rectangle { x: 16px; y: 140px; width: 138px; height: 1px; background: #1c1c1e; }
+
+        Text {
+            x: 0; y: 152px; width: 170px;
+            text: "RATE  (UP / DOWN to adjust)";
+            color: #3a3a3c; font-size: 9px;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            x: 0; y: 168px; width: 170px;
+            text: data.confirm_rate + "." + data.confirm_rate_dec;
+            color: #ff9f0a; font-size: 64px; font-weight: 700;
+            horizontal-alignment: center;
+        }
+        Text {
+            x: 0; y: 238px; width: 170px;
+            text: "mL / hr";
+            color: #636366; font-size: 13px;
+            horizontal-alignment: center;
+        }
+
+        // start button
+        Rectangle {
+            x: 20px; y: 262px; width: 130px; height: 36px;
+            border-radius: 18px;
+            background: #30d158;
+            Text {
+                x: 0; y: 10px; width: 130px;
+                text: "▶  START";
+                color: #000000; font-size: 14px; font-weight: 700;
+                horizontal-alignment: center;
+            }
+        }
+
+        Text {
+            x: 0; y: 308px; width: 170px;
+            text: "BACK = change drug";
+            color: #3a3a3c; font-size: 9px;
+            horizontal-alignment: center;
+        }
+    }
+
+    // ═══════════════════════════════════════
+    // MOTOR TEST  (state 7)
+    // ═══════════════════════════════════════
+    if data.state == 7: Rectangle {
+        x: 0; y: 0; width: 170px; height: 320px;
+        background: #000000;
+
+        // title bar
+        Rectangle {
+            x: 0; y: 0; width: 170px; height: 36px;
+            background: #111111;
+            Text {
+                x: 0; y: 10px; width: 170px;
+                text: "MOTOR TEST";
+                color: #ff9f0a;
+                font-size: 12px; font-weight: 700;
+                horizontal-alignment: center;
+            }
+        }
+
+        // step counter
+        Text {
+            x: 0; y: 80px; width: 170px;
+            text: data.motor_steps;
+            color: #ffffff;
+            font-size: 72px; font-weight: 700;
+            horizontal-alignment: center;
+        }
+        Text {
+            x: 0; y: 162px; width: 170px;
+            text: "steps sent";
+            color: #636366;
+            font-size: 12px;
+            horizontal-alignment: center;
+        }
+
+        // divider
+        Rectangle { x: 16px; y: 196px; width: 138px; height: 1px; background: #1c1c1e; }
+
+        Text {
+            x: 0; y: 210px; width: 170px;
+            text: "OK = send 200 steps fwd";
+            color: #8e8e93; font-size: 11px;
+            horizontal-alignment: center;
+        }
+        Text {
+            x: 0; y: 230px; width: 170px;
+            text: "BACK = exit test";
+            color: #48484a; font-size: 11px;
+            horizontal-alignment: center;
+        }
+    }
+
+    // ═══════════════════════════════════════
+    // ALARM  (state 2)
+    // ═══════════════════════════════════════
+    if data.state == 2: Rectangle {
+        x: 0;
+        y: 0;
+        width: 170px;
+        height: 320px;
+        background: data.blink ? #1a0000 : #000000;
+
+        // flashing border effect — top and bottom bars
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: 170px;
+            height: 6px;
+            background: data.blink ? #ff453a : #3d0f0a;
+        }
+
+        Rectangle {
+            x: 0;
+            y: 314px;
+            width: 170px;
+            height: 6px;
+            background: data.blink ? #ff453a : #3d0f0a;
+        }
+
+        // alarm icon + title
+        Text {
+            x: 0;
+            y: 52px;
+            width: 170px;
+            text: "⚠";
+            color: data.blink ? #ff453a : #7a1a1a;
+            font-size: 36px;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            x: 0;
+            y: 100px;
+            width: 170px;
+            text: data.alarm_title;
+            color: #ff453a;
+            font-size: 24px;
+            font-weight: 700;
+            horizontal-alignment: center;
+        }
+
+        // divider
+        Rectangle {
+            x: 30px;
+            y: 134px;
+            width: 110px;
+            height: 1px;
+            background: #3d0f0a;
+        }
+
+        // plain english description
+        Text {
+            x: 16px;
+            y: 148px;
+            width: 138px;
+            text: data.alarm_body;
+            color: #8e8e93;
+            font-size: 12px;
+            wrap: word-wrap;
+            horizontal-alignment: center;
+        }
+
+        // divider
+        Rectangle {
+            x: 30px;
+            y: 218px;
+            width: 110px;
+            height: 1px;
+            background: #3d0f0a;
+        }
+
+        // instruction
+        Text {
+            x: 0;
+            y: 230px;
+            width: 170px;
+            text: "Fix issue then press";
+            color: #636366;
+            font-size: 11px;
+            horizontal-alignment: center;
+        }
+
+        // silence pill
+        Rectangle {
+            x: 25px;
+            y: 252px;
+            width: 120px;
+            height: 34px;
+            border-radius: 17px;
+            background: #ff453a;
+            Text {
+                x: 0;
+                y: 9px;
+                width: 120px;
+                text: "SILENCE ALARM";
+                color: #ffffff;
+                font-size: 12px;
+                font-weight: 700;
+                horizontal-alignment: center;
+            }
+        }
+
+        // timestamp
+        Text {
+            x: 0;
+            y: 298px;
+            width: 170px;
+            text: data.alarm_time;
+            color: #3a3a3c;
+            font-size: 10px;
+            horizontal-alignment: center;
+        }
+    }
+}

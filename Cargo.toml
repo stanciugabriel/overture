@@ -1,0 +1,35 @@
+[package]
+name = "overture"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+embassy-rp       = { git = "https://github.com/embassy-rs/embassy", rev = "2e7a2b6", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp235xa"] }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "2e7a2b6", features = ["task-arena-size-98304", "arch-cortex-m", "executor-thread", "defmt"] }
+embassy-time     = { git = "https://github.com/embassy-rs/embassy", rev = "2e7a2b6", features = ["defmt", "defmt-timestamp-uptime"] }
+
+mipidsi               = "0.8"
+display-interface-spi = "0.5"
+embedded-hal-bus      = "0.1"
+embedded-graphics     = "0.8"
+display-interface = "0.5"
+embedded-hal          = "1.0"
+byte-slice-cast       = { version = "1.2", default-features = false }
+
+slint          = { version = "1.7", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "renderer-software", "libm"] }
+embedded-alloc = "0.5"
+libm           = "0.2"
+
+defmt       = "0.3"
+defmt-rtt   = "0.4"
+panic-probe = { version = "0.3", features = ["print-defmt"] }
+cortex-m    = "0.7"
+cortex-m-rt = "0.7"
+fmt = "0.1.0"
+
+[build-dependencies]
+slint-build = "1.7"
+
+
+[profile.release]
+debug = 2
