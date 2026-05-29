@@ -1,8 +1,19 @@
-[target.'cfg(all(target_arch = "arm", target_os = "none"))']
-runner = "probe-rs run --chip RP235x"
-
-[build]
-target = "thumbv8m.main-none-eabihf"
+[target.riscv32imac-unknown-none-elf]
+runner = "espflash flash --monitor --chip esp32c6"
 
 [env]
-DEFMT_LOG = "debug"
+
+[build]
+rustflags = [
+  # Required to obtain backtraces (e.g. when using the "esp-backtrace" crate.)
+  # NOTE: May negatively impact performance of produced code
+  "-C", "force-frame-pointers",
+]
+
+# [alias]
+# esp-check = "check --target riscv32imac-unknown-none-elf"
+# esp-build = "build --target riscv32imac-unknown-none-elf"
+target = "riscv32imac-unknown-none-elf"
+
+[unstable]
+build-std = ["core"]
